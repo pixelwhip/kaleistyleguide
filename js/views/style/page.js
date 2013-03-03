@@ -11,23 +11,33 @@ define([
   'libs/parseuri/parseuri',
   'libs/waypoints/waypoints'
 ], function($, _, Backbone, stylePageTemplate, jscssp, config, Pagedown, marked, hljs, parseuri, waypoints){
+
   var StylePage = Backbone.View.extend({
     el: '.kalei-style-page',
     render: function () {
       var that = this;
-        $('a.kalei-styleguide-menu-link').removeClass('active');
-        $('[href="' + window.location.hash + '"]').addClass('active');
-        if(window.location.hash === '') {
-          $('.js-kalei-home').addClass('active');
-        }
+
+      // Set the active menu link.
+      $('a.kalei-styleguide-menu-link').removeClass('active');
+      $('[href="' + window.location.hash + '"]').addClass('active');
+      if(window.location.hash === '') {
+        $('.js-kalei-home').addClass('active');
+      }
+
+      // Link the current styesheet.
       $('head').append('<link rel="stylesheet" href="' + config.css_path + '"" type="text/css" />');
+
       var converter = new Pagedown.Converter();
+      // Set default Markdown options.
       var markedOpts = _.extend({ sanitize: false, gfm: true }, config.marked_options || {});
       var styleUrl;
       var configDir;
+
       if(this.options.style === null) {
-        this.options.style = config.css_path.substr(config.css_path.lastIndexOf('/')+1);
+        this.options.style = config.css_path.substr(config.css_path.lastIndexOf('/') + 1);
       }
+
+      // Extract the configuration directory and stylesheet url from the css_path.
       if(this.options.style.substr(0,1) === '/') {
         // non relative
         configDir = config.css_path.substr(0, config.css_path.lastIndexOf('/'));
@@ -37,21 +47,29 @@ define([
         configDir = config.css_path.substr(0, config.css_path.lastIndexOf('/'));
         styleUrl = configDir + '/' + this.options.style;
       }
+
       console.log('try', styleUrl);
-     require(['text!'+ styleUrl], function (stylesheet){
-        var parser = new jscssp();
+
+      // Load the CSS resource.
+      require(['text!' + styleUrl], function (stylesheet){
+        var parser = new jscssp(),
+            blocks = [],
+            currentBlock = {
+              links: {},
+              comments: [],
+              css: ''
+            },
+            headings = [];
+
         marked.setOptions(markedOpts);
+
+        // Parse the stylesheet.
         stylesheet = parser.parse(stylesheet, false, true);
-        var blocks = [];
-        var currentBlock = {
-          links: {},
-          comments: [],
-          css: ''
 
-        };
-        var headings = [];
-
+        // Loop through each CSS rule.
         _.each(stylesheet.cssRules, function(rule) {
+
+          // Handle CSS Comment rules.
           if(rule.type === 101) {
             var comment = rule.parsedCssText;
             comment = comment.replace('/*', '');
@@ -61,7 +79,7 @@ define([
             currentBlock.comments.links = defLinks;
 
             _.each(comments, function (comment) {
-              
+
               if(comment.type === 'heading' && comment.depth <= 2) {
                 headings.push(comment.text);
                 currentBlock.css = css_beautify(currentBlock.css);
@@ -80,25 +98,29 @@ define([
                 });
               }
               currentBlock.comments.push(comment);
-            
             });
-
           }
+
+          // Handle CSS Style rules.
           if(rule.type === 1) {
             currentBlock.css += rule.parsedCssText;
-
           }
+
+          // Handle CSS Import rules.
           if(rule.type === 3) {
             console.log(rule);
             currentBlock.comments.push({
-                  type: 'code',
-                  text: rule.parsedCssText
-                });
-
+              type: 'code',
+              text: rule.parsedCssText
+            });
           }
 
         });
-      $('.sheet-submenu').slideUp(200);
+
+        // Build the styleguide markup.
+
+        // Collapse all sub menus.
+        $('.sheet-submenu').slideUp(200);
         currentBlock.css = css_beautify(currentBlock.css);
         var submenu = $('<ul>');
         _.each(headings, function (heading) {
@@ -109,28 +131,29 @@ define([
         currentBlock.comments = marked.parser(currentBlock.comments);
         blocks.push(currentBlock);
         $(that.el).html(_.template(stylePageTemplate, {_:_, blocks: blocks, config: config}));
-        $(' code').each(function(i, e) {hljs.highlightBlock(e); });
-
-        $('.kalei-comments-container > .kalei-comments > h2, .kalei-comments-container > .kalei-comments  > h1').waypoint(function(ev) {
-          console.log(arguments);
-         $('.sheet-submenu li').removeClass('active');
-           $('.sheet-submenu li:contains('+$(ev.currentTarget).text()+')').addClass('active');
-        }, {
-   offset: 20  // middle of the page
-});
+        $(' code').each(function(i, e) {
+          hljs.highlightBlock(e);
+        });
+        $('.kalei-comments-container > .kalei-comments > h2, .kalei-comments-container > .kalei-comments  > h1')
+          .waypoint(
+            function(ev) {
+              console.log(arguments);
+              $('.sheet-submenu li').removeClass('active');
+              $('.sheet-submenu li:contains('+$(ev.currentTarget).text()+')').addClass('active');
+            }, {
+              offset: 20  // middle of the page
+            }
+          );
 
         $("body").on('click', '.sheet-submenu li', function(ev) {
-
           $('html, body').animate({
             scrollTop: $(".kalei-comments h2:contains('"+$(ev.currentTarget).text()+"'),.kalei-comments h1:contains('"+$(ev.currentTarget).text()+"')").offset().top - 20
           }, 200);
         });
 
         fixie.init();
-        
-      });
 
-      
+      }); // END loading CSS resource.
     }
   });
   return StylePage;
